@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { PromptInput } from './components/PromptInput';
 import { ComponentCard } from './components/ComponentCard';
+import { StreamingCard } from './components/StreamingCard';
 import { useComponentGenerator } from './hooks/useComponentGenerator';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import type { Provider } from './types';
@@ -28,7 +29,7 @@ function App() {
     anthropic: false,
     google: false,
   });
-  const { components, isLoading, error, generate, removeComponent, clearAll } =
+  const { components, isLoading, error, streaming, generate, removeComponent, clearAll } =
     useComponentGenerator();
 
   useEffect(() => {
@@ -175,7 +176,9 @@ function App() {
           </div>
         )}
 
-        {isLoading && (
+        {streaming && <StreamingCard prompt={streaming.prompt} code={streaming.code} />}
+
+        {isLoading && !streaming && (
           <div className="window loading-card" role="status">
             <div className="window-title">
               <h2>생성 중</h2>
