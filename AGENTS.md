@@ -22,6 +22,7 @@ bun run build        # tsc -b && vite build
 
 - 테스트는 반드시 `bun run test`로 실행한다. `bun test`(Bun 내장 러너)는 쓰지 않는다. jsdom 환경, `src/test/setup.ts`, `include` 패턴이 모두 `vite.config.ts:16-21`의 vitest 설정에 있어서 Bun 러너는 이를 읽지 않는다.
 - 서버 `process.env`의 API 키 값을 클라이언트 응답에 넣지 않는다. `/api/config`는 `!!ENV_KEYS.x` 불리언만 반환한다 (`server/index.ts:150-153`). 키 값, 키가 포함된 URL을 로그나 에러 메시지에 남기지 않는다. Gemini 호출 URL은 쿼리스트링에 키를 포함한다 (`server/index.ts:99`).
+- 민감 파일(`.env`, `.env.*`, `*credential*`, `*secret*`, `*.pem`, `*.key`, `.npmrc`, `.ssh/`, `.aws/` 등)은 읽거나 수정하지 않는다. `cat`, `Get-Content`, `grep`, `cp` 등 셸 명령으로 우회하는 것도 금지하고, `printenv`·`env`로 환경변수를 통째로 출력하지 않는다. `.claude/settings.json`의 `permissions.deny`가 이를 강제하므로 규칙을 바꿀 때는 두 곳을 함께 수정한다. 키가 필요하면 사용자에게 설정을 요청한다.
 - 생성 코드 규약(import 금지, `render(<Name />)` 호출, 순수 JS)은 SYSTEM_PROMPT(`server/index.ts:11,12,20`)와 react-live `noInline` 미리보기(`src/components/LivePreview.tsx:95`)가 서로 맞물려 있다. 한쪽만 바꾸지 않는다.
 
 ### Do
