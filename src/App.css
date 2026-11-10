@@ -270,6 +270,26 @@
   line-height: 1.7;
 }
 
+.prompt-field {
+  display: grid;
+  gap: 6px;
+}
+
+.prompt-textarea--invalid {
+  border-color: var(--red);
+}
+
+.prompt-counter {
+  justify-self: end;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.prompt-error {
+  color: var(--red);
+  line-height: 1.5;
+}
+
 .prompt-textarea::placeholder {
   color: var(--ink-soft);
   opacity: 0.8;
