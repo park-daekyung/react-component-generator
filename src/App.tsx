@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { PromptInput } from './components/PromptInput';
 import { ComponentCard } from './components/ComponentCard';
 import { useComponentGenerator } from './hooks/useComponentGenerator';
+import { useLocalStorage } from './hooks/useLocalStorage';
 import type { Provider } from './types';
 import './App.css';
 
@@ -10,10 +11,19 @@ const PROVIDER_CONFIG = {
   google: { label: 'Google', placeholder: 'AIza...' },
 } as const;
 
+const MAX_HISTORY = 10;
+
+const parseString = (raw: unknown) => (typeof raw === 'string' ? raw : null);
+const parseProvider = (raw: unknown) =>
+  typeof raw === 'string' && raw in PROVIDER_CONFIG ? (raw as Provider) : null;
+const parseHistory = (raw: unknown) =>
+  Array.isArray(raw) ? raw.filter((v): v is string => typeof v === 'string') : null;
+
 function App() {
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useLocalStorage('rcg:apiKey', '', parseString);
   const [showKey, setShowKey] = useState(false);
-  const [provider, setProvider] = useState<Provider>('google');
+  const [provider, setProvider] = useLocalStorage<Provider>('rcg:provider', 'google', parseProvider);
+  const [history, setHistory] = useLocalStorage<string[]>('rcg:promptHistory', [], parseHistory);
   const [envKeys, setEnvKeys] = useState<Record<Provider, boolean>>({
     anthropic: false,
     google: false,
@@ -35,6 +45,7 @@ function App() {
       alert(`${PROVIDER_CONFIG[provider].label} API 키를 입력하거나 .env에 설정해주세요.`);
       return;
     }
+    setHistory((prev) => [prompt, ...prev.filter((p) => p !== prompt)].slice(0, MAX_HISTORY));
     generate(prompt, apiKey || undefined, provider);
   };
 
@@ -69,7 +80,7 @@ function App() {
             <h2 id="composer-title">무엇을 만들까요?</h2>
           </div>
           <div className="window-body">
-            <PromptInput onGenerate={handleGenerate} isLoading={isLoading} />
+            <PromptInput onGenerate={handleGenerate} isLoading={isLoading} history={history} />
           </div>
         </section>
 
