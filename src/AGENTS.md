@@ -2,7 +2,7 @@
 
 ## Module Context
 
-Vite로 빌드되는 React 19 클라이언트. `/api/*` 요청은 Vite 프록시를 거쳐 `server/`로 간다. 상태는 `App.tsx`와 `hooks/useComponentGenerator.ts`의 React state에만 있다.
+Vite로 빌드되는 React 19 클라이언트. `/api/*` 요청은 Vite 프록시를 거쳐 `server/`로 간다. 상태는 `App.tsx`와 `hooks/useComponentGenerator.ts`의 React state에 있고, API 키·Provider·프롬프트 히스토리·생성 컴포넌트는 `hooks/useLocalStorage.ts`로 `localStorage`(`rcg:*` 키)에 동기화된다.
 
 ## Tech Stack & Constraints
 
@@ -26,7 +26,7 @@ Vite로 빌드되는 React 19 클라이언트. `/api/*` 요청은 Vite 프록시
 
 ### Immutable
 
-- API 키는 `App.tsx`의 React state(`apiKey`)에만 둔다. `localStorage`, `sessionStorage`, 쿠키, URL에 저장하지 않는다 (src 전체에 저장소 접근이 없음을 확인했다).
+- API 키는 `App.tsx`의 `apiKey` state와 `localStorage`(`rcg:apiKey`, `hooks/useLocalStorage.ts` 경유)에만 둔다. 사용자 요청으로 새로고침 유지를 허용했다. `sessionStorage`, 쿠키, URL에 저장하거나 로그에 남기지 않는다.
 - `LiveProvider`에 `scope`를 전달하지 않는다 (`components/LivePreview.tsx:95`). AI가 생성한 코드가 앱 페이지에서 그대로 실행되므로, 앱 state, 키, 함수를 scope로 넘기면 생성 코드가 접근할 수 있다.
 
 ### Do

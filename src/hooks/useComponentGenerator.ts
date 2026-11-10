@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { GeneratedComponent, Provider } from '../types';
+import { useLocalStorage } from './useLocalStorage';
 
 interface UseComponentGeneratorReturn {
   components: GeneratedComponent[];
@@ -10,8 +11,29 @@ interface UseComponentGeneratorReturn {
   clearAll: () => void;
 }
 
+function parseComponents(raw: unknown): GeneratedComponent[] | null {
+  if (!Array.isArray(raw)) return null;
+  return raw.flatMap((item) => {
+    if (
+      typeof item !== 'object' || item === null ||
+      typeof item.id !== 'string' ||
+      typeof item.prompt !== 'string' ||
+      typeof item.code !== 'string'
+    ) {
+      return [];
+    }
+    const createdAt = new Date(item.createdAt);
+    if (Number.isNaN(createdAt.getTime())) return [];
+    return [{ id: item.id, prompt: item.prompt, code: item.code, createdAt }];
+  });
+}
+
 export function useComponentGenerator(): UseComponentGeneratorReturn {
-  const [components, setComponents] = useState<GeneratedComponent[]>([]);
+  const [components, setComponents] = useLocalStorage<GeneratedComponent[]>(
+    'rcg:components',
+    [],
+    parseComponents,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,15 +68,15 @@ export function useComponentGenerator(): UseComponentGeneratorReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setComponents]);
 
   const removeComponent = useCallback((id: string) => {
     setComponents((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+  }, [setComponents]);
 
   const clearAll = useCallback(() => {
     setComponents([]);
-  }, []);
+  }, [setComponents]);
 
   return { components, isLoading, error, generate, removeComponent, clearAll };
 }
