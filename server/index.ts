@@ -1,5 +1,5 @@
-import { stripCodeFences, ensureRenderCall } from './generator';
 import { withModelFallback } from './fallback';
+import { streamEvents, extractAnthropicDelta, extractGoogleDelta, type Delta } from './sse';
 
 // 우선순위 순서. 앞 모델이 실패하면 다음 모델로 폴백한다.
 const GOOGLE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash'];
@@ -65,7 +65,8 @@ function resolveApiKey(provider: Provider, clientKey?: string): string | null {
   return clientKey || ENV_KEYS[provider] || null;
 }
 
-async function callAnthropic(prompt: string, apiKey: string): Promise<string> {
+// 프로바이더 스트림을 열고 상태 코드만 검증한다. 실패하면 503/429 변환을 위해 상태 코드가 든 에러를 던진다.
+async function openAnthropicStream(prompt: string, apiKey: string): Promise<Response> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -76,6 +77,7 @@ async function callAnthropic(prompt: string, apiKey: string): Promise<string> {
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
+      stream: true,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -84,19 +86,11 @@ async function callAnthropic(prompt: string, apiKey: string): Promise<string> {
   if (!response.ok) {
     throw new Error(`Claude API error: ${response.status}`);
   }
-
-  const data = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>;
-  };
-
-  return data.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
+  return response;
 }
 
-async function callGoogleModel(prompt: string, apiKey: string, model: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+async function openGoogleStream(prompt: string, apiKey: string, model: string): Promise<Response> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -112,27 +106,42 @@ async function callGoogleModel(prompt: string, apiKey: string, model: string): P
     throw new Error(`Gemini API error: ${response.status}`);
   }
 
-  const data = (await response.json()) as {
-    candidates: Array<{
-      content: { parts: Array<{ text?: string }> };
-      finishReason?: string;
-    }>;
-  };
-
-  const candidate = data.candidates?.[0];
-  if (candidate?.finishReason === 'MAX_TOKENS') {
-    throw new Error('생성된 코드가 너무 길어 잘렸습니다. 더 간단한 컴포넌트를 요청해주세요.');
-  }
-
-  return (
-    candidate?.content?.parts
-      ?.map((part) => part.text)
-      ?.join('') ?? ''
-  );
+  return response;
 }
 
-async function callGoogle(prompt: string, apiKey: string): Promise<string> {
-  return withModelFallback(GOOGLE_MODELS, (model) => callGoogleModel(prompt, apiKey, model));
+// 모델 폴백은 스트림을 여는 단계까지만 적용된다. 스트리밍이 시작된 뒤의 실패는 error 이벤트로 전달한다.
+async function openGoogle(prompt: string, apiKey: string): Promise<Response> {
+  return withModelFallback(GOOGLE_MODELS, (model) => openGoogleStream(prompt, apiKey, model));
+}
+
+// streamEvents(순수 로직)의 이벤트를 NDJSON 바이트 스트림으로 내보내는 어댑터.
+// pull 방식이라 클라이언트가 끊으면 cancel()이 제너레이터를 닫고, 업스트림 읽기도 함께 중단된다.
+function toEventStream(
+  upstream: Response,
+  extract: (payload: string) => Delta,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const events = streamEvents(upstream.body as unknown as AsyncIterable<Uint8Array>, extract);
+
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { value, done } = await events.next();
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue(encoder.encode(JSON.stringify(value) + '\n'));
+        }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Unknown error';
+        controller.enqueue(encoder.encode(JSON.stringify({ type: 'error', error }) + '\n'));
+        controller.close();
+      }
+    },
+    async cancel() {
+      await events.return(undefined);
+    },
+  });
 }
 
 const server = Bun.serve({
@@ -180,14 +189,16 @@ const server = Bun.serve({
           );
         }
 
-        const text =
+        const upstream =
           provider === 'google'
-            ? await callGoogle(prompt, resolvedKey)
-            : await callAnthropic(prompt, resolvedKey);
+            ? await openGoogle(prompt, resolvedKey)
+            : await openAnthropicStream(prompt, resolvedKey);
 
-        const code = ensureRenderCall(stripCodeFences(text));
+        const extract = provider === 'google' ? extractGoogleDelta : extractAnthropicDelta;
 
-        return Response.json({ code }, { headers: CORS_HEADERS });
+        return new Response(toEventStream(upstream, extract), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' },
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
 

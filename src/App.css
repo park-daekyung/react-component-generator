@@ -617,6 +617,25 @@
   line-height: 1.75;
 }
 
+/* 스트리밍 중에는 높이를 고정하고 안에서 스크롤해, 코드가 늘어도 페이지가 밀리지 않게 한다. */
+.code-block--streaming {
+  height: 420px;
+  overflow-y: auto;
+}
+
+.code-block--streaming .cursor {
+  width: 8px;
+  height: 14px;
+  margin-left: 2px;
+  background: #f4f1dc;
+  vertical-align: middle;
+}
+
+.tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* ---------- 반응형 ---------- */
 
 @media (max-width: 960px) {

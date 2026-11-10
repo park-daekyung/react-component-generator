@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import { doneResponse } from './test/streamMock';
 
 function stubFetch() {
   vi.stubGlobal(
@@ -10,10 +11,57 @@ function stubFetch() {
       if (url === '/api/config') {
         return { ok: true, json: async () => ({ envKeys: { anthropic: false, google: false } }) };
       }
-      return { ok: true, json: async () => ({ code: 'render(<A />)' }) };
+      return doneResponse('render(<A />)');
     }),
   );
 }
+
+describe('App 스트리밍 UX', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it('생성 중에는 코드 탭에 실시간 코드를 보여주고, 완료되면 미리보기 탭으로 전환한다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if (url === '/api/config') {
+          return { ok: true, json: async () => ({ envKeys: { anthropic: false, google: false } }) };
+        }
+        return {
+          ok: true,
+          body: new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(encoder.encode('{"type":"delta","text":"const Live = 1;"}\n'));
+              await gate;
+              controller.enqueue(encoder.encode('{"type":"done","code":"const Live = 1;\\nrender(<div />)"}\n'));
+              controller.close();
+            },
+          }),
+        };
+      }),
+    );
+    localStorage.setItem('rcg:apiKey', JSON.stringify('AIza-key'));
+
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(screen.getByRole('textbox'), '카드');
+    await user.click(screen.getByRole('button', { name: '컴포넌트 생성' }));
+
+    expect(await screen.findByText('const Live = 1;')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '코드' })).toHaveAttribute('aria-selected', 'true');
+
+    release();
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: '미리보기' })).toHaveAttribute('aria-selected', 'true'),
+    );
+  });
+});
 
 describe('App 상태 영속화', () => {
   beforeEach(() => {
