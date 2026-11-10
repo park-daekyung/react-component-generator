@@ -1,0 +1,40 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --desk: #c6cae0;
+  --desk-dot: #b9bed8;
+  --ink: #20203a;
+}
+
+body {
+  font-family: Galmuri14, Galmuri11, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  font-size: 14px;
+  background-color: var(--desk);
+  background-image: conic-gradient(
+    var(--desk-dot) 25%,
+    transparent 0 50%,
+    var(--desk-dot) 0 75%,
+    transparent 0
+  );
+  background-size: 4px 4px;
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
